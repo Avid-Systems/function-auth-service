@@ -10,7 +10,7 @@ namespace Avid.Function
     public class GetAccessToken(ILoggerFactory loggerFactory)
     {
         private readonly ILogger _logger = loggerFactory.CreateLogger<GetAccessToken>();
-        private readonly string[] scopes = new string[] { $"{Environment.GetEnvironmentVariable("OrgUrl")}/.default" };
+        private readonly string[] scopes = [$"{Environment.GetEnvironmentVariable("OrgUrl")}/.default"];
 
         [Function("GetAccessToken")]
         public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
@@ -34,7 +34,6 @@ namespace Avid.Function
             var response = req.CreateResponse(HttpStatusCode.OK);
             try
             {
-                var resultTest = await app.AcquireTokenOnBehalfOf(scopes, new UserAssertion("assertion")).ExecuteAsync();
                 var result = await app.AcquireTokenForClient(scopes).ExecuteAsync();
                 var tokenResponse = new { token = result.AccessToken };
 
