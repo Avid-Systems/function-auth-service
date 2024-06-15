@@ -1,73 +1,68 @@
+using System;
 using System.Collections.Specialized;
+using System.IO;
 using System.Net;
+using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Avid.Function
 {
     public class TokenExchange(ILoggerFactory loggerFactory)
     {
         private readonly ILogger _logger = loggerFactory.CreateLogger<TokenExchange>();
+        private readonly NameValueCollection _config = new()
+        {
+            { "clientId", Environment.GetEnvironmentVariable("ClientId") },
+            { "clientSecret", Environment.GetEnvironmentVariable("ClientSecret") }
+        };
+
+        private static readonly JsonSerializerOptions JsonSerializerOptions = new()
+        {
+            PropertyNameCaseInsensitive = true
+        };
 
         [Function("TokenExchange")]
         public async Task<HttpResponseData> Run([HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req)
         {
             _logger.LogInformation("TokenExchange HTTP trigger function processed a request.");
 
-            var config = new NameValueCollection
-                {
-                    { "clientId", Environment.GetEnvironmentVariable("ClientId") },
-                    { "clientSecret", Environment.GetEnvironmentVariable("ClientSecret") }
-                };
-
-
-            _logger.LogInformation("read requestBody");
-
-
-
-            string requestBody = String.Empty;
-            using (StreamReader streamReader = new StreamReader(req.Body))
+            string requestBody;
+            using (StreamReader streamReader = new(req.Body))
             {
                 requestBody = await streamReader.ReadToEndAsync();
             }
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
 
+            var data = JsonSerializer.Deserialize<RequestData>(requestBody, JsonSerializerOptions);
 
-            _logger.LogInformation("read requestBody done");
+            string tenantId = data?.TenantId;
+            string token = data?.Token;
+            string orgUrl = data?.OrgUrl;
+            string resources = data?.Resources;
 
-
-
-
-            string? tenantId = data?.tenantId;
-            string? token = data?.token;
-            string? orgUrl = data?.orgUrl;
-            string[] scopes = [$"{orgUrl}.default"];
-
-
-            if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(token))
+            if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(resources))
             {
                 var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badRequestResponse.WriteStringAsync("Please provide tenantId and token in the request body.");
+                await badRequestResponse.WriteStringAsync("Please provide tenantId, token, and resources in the request body.");
                 return badRequestResponse;
             }
 
-            IConfidentialClientApplication app = ConfidentialClientApplicationBuilder.Create(config["clientId"])
-           .WithClientSecret(config["clientSecret"])
-           .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}"))
-           .Build();
-
-            UserAssertion userAssertion = new(token);
-            AuthenticationResult result;
-            var graphToken = string.Empty;
+            var tokenResponse = new TokenResponse();
 
             try
             {
-                result = await app.AcquireTokenOnBehalfOf(scopes, userAssertion).ExecuteAsync();
-                graphToken = await AcquireTokenAsync(config, tenantId, token, "https://graph.microsoft.com/.default");
-                _logger.LogInformation($"graphToken : {graphToken}");
+                if (resources.Contains("dataverse", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(orgUrl))
+                {
+                    tokenResponse.DataverseToken = await GetDataverseToken(tenantId, token, orgUrl);
+                }
+
+                if (resources.Contains("graph", StringComparison.OrdinalIgnoreCase))
+                {
+                    tokenResponse.GraphToken = await GetGraphToken(tenantId, token);
+                }
             }
             catch (MsalServiceException ex)
             {
@@ -78,32 +73,45 @@ namespace Avid.Function
             }
 
             var response = req.CreateResponse(HttpStatusCode.OK);
-
-            var tokenResponse = new
-            {
-
-                dataverseToken = result.AccessToken,
-                graphToken
-
-            };
-
             await response.WriteAsJsonAsync(tokenResponse);
-
-
             return response;
         }
 
-        private static async Task<string> AcquireTokenAsync(NameValueCollection config, string tenantId, string userToken, string scope)
+        private async Task<string> GetDataverseToken(string tenantId, string exchangeToken, string orgUrl)
         {
-            IConfidentialClientApplication app = ConfidentialClientApplicationBuilder.Create(config["clientId"])
-               .WithClientSecret(config["clientSecret"])
+            return await AcquireTokenAsync(tenantId, exchangeToken, $"{orgUrl}/.default");
+        }
+
+        private async Task<string> GetGraphToken(string tenantId, string exchangeToken)
+        {
+            return await AcquireTokenAsync(tenantId, exchangeToken, "https://graph.microsoft.com/.default");
+        }
+
+        private async Task<string> AcquireTokenAsync(string tenantId, string exchangeToken, string scope)
+        {
+            IConfidentialClientApplication app = ConfidentialClientApplicationBuilder.Create(_config["clientId"])
+               .WithClientSecret(_config["clientSecret"])
                .WithAuthority(new Uri($"https://login.microsoftonline.com/{tenantId}"))
                .Build();
 
-            UserAssertion userAssertion = new(userToken);
+            UserAssertion userAssertion = new(exchangeToken);
             AuthenticationResult result = await app.AcquireTokenOnBehalfOf([scope], userAssertion).ExecuteAsync();
 
             return result.AccessToken;
+        }
+
+        private class RequestData
+        {
+            public string TenantId { get; set; }
+            public string Token { get; set; }
+            public string OrgUrl { get; set; }
+            public string Resources { get; set; }
+        }
+
+        private class TokenResponse
+        {
+            public string DataverseToken { get; set; }
+            public string GraphToken { get; set; }
         }
     }
 }
