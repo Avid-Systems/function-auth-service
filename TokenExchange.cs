@@ -1,8 +1,6 @@
-using System;
+
 using System.Collections.Specialized;
-using System.IO;
 using System.Net;
-using System.Threading.Tasks;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -38,10 +36,10 @@ namespace Avid.Function
 
             var data = JsonSerializer.Deserialize<RequestData>(requestBody, JsonSerializerOptions);
 
-            string tenantId = data?.TenantId;
-            string token = data?.Token;
-            string orgUrl = data?.OrgUrl;
-            string resources = data?.Resources;
+            string? tenantId = data?.TenantId;
+            string? token = data?.Token;
+            string? orgUrl = data?.OrgUrl;
+            string? resources = data?.Resources;
 
             if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(token) || string.IsNullOrEmpty(resources))
             {

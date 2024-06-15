@@ -23,44 +23,46 @@ Exchanges a provided token for access tokens to Dataverse and/or Microsoft Graph
 - `orgurl`: The organization URL for Dataverse (if Dataverse token is requested).
 - `resources`: Comma-separated string specifying requested resources (dataverse, graph, or both).
 
-````json
+```json
 {
-    "tenantid": "string",
-    "token": "string",
-    "orgurl": "string",
-    "resources": "string"
+  "tenantid": "string",
+  "token": "string",
+  "orgurl": "string",
+  "resources": "string"
 }
+```
 
 ##### Example
 
 ```json
 {
-    "tenantid": "your-tenant-id",
-    "token": "your-spa-token",
-    "orgurl": "https://your-org.crm.dynamics.com",
-    "resources": "dataverse,graph"
+  "tenantid": "your-tenant-id",
+  "token": "your-spa-token",
+  "orgurl": "https://your-org.crm.dynamics.com",
+  "resources": "dataverse,graph"
 }
+```
 
 ##### Responses
 
 ###### 200 OK
-
 
 - `dataversetoken`: The access token for Dataverse API (if requested)..
 - `graphtoken`: The access token for Graph API (if requested).
 
 ```json
 {
-    "dataversetoken": "string",
-    "graphtoken": "string"
+  "dataversetoken": "string",
+  "graphtoken": "string"
 }
+```
 
 ###### 400 Bad Request
 
 ```json
 {
-    "error": "string"
+  "error": "string"
 }
+```
 
 func new --name TokenExchange --template "HTTP trigger" --authlevel "function"
-````
